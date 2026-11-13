@@ -1,15 +1,14 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
-import { call, db, IdPhotos, RegistrationForm, useDoc, useI18n } from "@tivbook/client";
+import { useState, type FormEvent } from "react";
+import { call, IdPhotos, RegistrationForm, useI18n, useRow, useRows } from "@tivbook/client";
 import { can, type Role } from "./roles";
 
 interface Hit { playerId: string; surname: string; firstNames: string; phoneE164: string; kycStatus: string; status: string }
-interface PlayerDoc {
-  surname: string; firstNames: string; phoneE164: string; dateOfBirth: string; address: string; countryOfResidence: string;
-  nationality: string; idDocType: "national_id" | "passport"; idImages: string[]; kycStatus: "unverified" | "verified" | "rejected";
-  kycReason?: string; status: string; source?: string;
+interface PlayerRow {
+  surname: string; first_names: string; phone_e164: string; date_of_birth: string; address: string; country_of_residence: string;
+  nationality: string; id_doc_type: "national_id" | "passport"; id_images: string[]; kyc_status: "unverified" | "verified" | "rejected";
+  kyc_reason?: string | null; status: string; source?: string;
 }
-interface IdDoc { id: string; kind: string; contentType: string }
+interface IdDoc { id: string; kind: string; content_type: string; replaced_by: string | null }
 
 export function PlayersPage({ role }: { role: Role }) {
   const { t } = useI18n();
@@ -67,17 +66,12 @@ export function PlayersPage({ role }: { role: Role }) {
 /** Live player card: any change (player app upload, another cashier) appears immediately. */
 function PlayerCard({ playerId, role, onBack }: { playerId: string; role: Role; onBack: () => void }) {
   const { t } = useI18n();
-  const { data: p, loading } = useDoc<PlayerDoc>(`players/${playerId}`);
-  const [docs, setDocs] = useState<IdDoc[]>([]);
+  const { data: p, loading } = useRow<PlayerRow>("players", "player_id", playerId);
+  const docsLive = useRows<IdDoc>("identity_documents", { column: "player_id", value: playerId }, { enabled: can.viewId(role) || can.register(role) });
+  const docs = docsLive.rows.filter((d) => !d.replaced_by);
   const [image, setImage] = useState<{ src: string; kind: string; heic: boolean } | null>(null);
   const [reason, setReason] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-
-  useEffect(() => {
-    if (!can.viewId(role) && !can.register(role)) return;
-    return onSnapshot(query(collection(db, "identity_documents"), where("playerId", "==", playerId), where("replacedBy", "==", null)),
-      (s) => setDocs(s.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<IdDoc, "id">) }))));
-  }, [playerId, role]);
 
   async function view(id: string) {
     try {
@@ -102,23 +96,23 @@ function PlayerCard({ playerId, role, onBack }: { playerId: string; role: Role; 
       </div>
       <div className="grid2">
         <div className="card stack">
-          <div className="row spread"><h1 style={{ margin: 0 }}>{p.surname} {p.firstNames}</h1><span className="player-id" style={{ fontSize: "2rem" }}>{playerId}</span></div>
-          <Row k={t("mobileNumber")} v={p.phoneE164} />
-          <Row k={t("dateOfBirth")} v={p.dateOfBirth} />
+          <div className="row spread"><h1 style={{ margin: 0 }}>{p.surname} {p.first_names}</h1><span className="player-id" style={{ fontSize: "2rem" }}>{playerId}</span></div>
+          <Row k={t("mobileNumber")} v={p.phone_e164} />
+          <Row k={t("dateOfBirth")} v={p.date_of_birth} />
           <Row k={t("address")} v={p.address} />
-          <Row k={t("countryOfResidence")} v={p.countryOfResidence} />
+          <Row k={t("countryOfResidence")} v={p.country_of_residence} />
           <Row k={t("nationality")} v={p.nationality} />
-          <Row k={t("idDocType")} v={p.idDocType === "passport" ? t("passport") : t("nationalId")} />
-          <div className="row spread"><span className="muted">{t("identity")}</span><span className={`badge ${p.kycStatus}`}>{t(`kyc_${p.kycStatus}`)}</span></div>
-          {p.kycReason && <p className="small muted">{t("reason")}: {p.kycReason}</p>}
+          <Row k={t("idDocType")} v={p.id_doc_type === "passport" ? t("passport") : t("nationalId")} />
+          <div className="row spread"><span className="muted">{t("identity")}</span><span className={`badge ${p.kyc_status}`}>{t(`kyc_${p.kyc_status}`)}</span></div>
+          {p.kyc_reason && <p className="small muted">{t("reason")}: {p.kyc_reason}</p>}
         </div>
         <div className="card stack">
           <h2>{t("idPhotos")}</h2>
           {can.viewId(role) && docs.length > 0 && (
             <div className="row">{docs.map((d) => <button key={d.id} className="secondary" onClick={() => void view(d.id)}>{t("viewPhoto")}: {d.kind}</button>)}</div>
           )}
-          {can.register(role) && <IdPhotos docType={p.idDocType} uploaded={p.idImages ?? []} playerId={playerId} />}
-          {can.verifyKyc(role) && p.kycStatus !== "verified" && (
+          {can.register(role) && <IdPhotos docType={p.id_doc_type} uploaded={p.id_images ?? []} playerId={playerId} />}
+          {can.verifyKyc(role) && p.kyc_status !== "verified" && (
             <div className="stack">
               <p className="small muted">Check the ORIGINAL document in hand: photo, names, date of birth and number.</p>
               <button onClick={() => void kyc("verified")}>✓ {t("verifyIdentity")}</button>

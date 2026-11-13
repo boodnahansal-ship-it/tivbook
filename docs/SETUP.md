@@ -1,89 +1,70 @@
-# TiVBook — Setup Guide
+# TiVBook — Installation
 
-TiVBook has **two things to install**:
+TiVBook comes as **two downloads**, and both are free to run:
 
-| | For whom | How |
+| | For | File |
 |---|---|---|
-| **TiVBook Staff** | Admin, Manager, Tournament Director, Cashier, Floor, Dealer, Front Desk | **One setup file** for Windows: `TiVBook-Staff-Setup.exe`. Or open the staff website from any browser, with nothing to install. |
-| **TiVBook** (player app) | Players | Download on Android / iPhone, or use the player website. |
+| **TiVBook Staff** | Admin, Manager, Cashier, Floor, Front Desk, Dealer | `TiVBook-Staff-Setup.exe` (Windows 10/11) |
+| **TiVBook** | Players' phones | `TiVBook-Player.apk` (Android) |
 
-Everything runs **online**. Every staff PC, the staff website and every player's phone read the same live database, so a change made in one place appears everywhere within about a second. If the internet drops for a moment, screens keep working with the last data and catch up automatically.
-
----
-
-## Part A — Put TiVBook online (once, about 15 minutes)
-
-Do this once, on any Windows or Mac computer.
-
-1. **Create the Firebase project.** Go to <https://console.firebase.google.com>, click **Add project** and name it, for example `tivbook-tivegas`. Then:
-   - **Upgrade** to the **Blaze** plan (Settings → Usage and billing). This is required for the server functions. Normal casino traffic costs little.
-   - **Build → Authentication → Get started → Email/Password → Enable.**
-   - **Build → Firestore Database → Create database.** Choose location **europe-west1** and start in **production mode**.
-   - **Build → Storage → Get started**, same location.
-2. **Install Node.js 22** from <https://nodejs.org> (choose "LTS").
-3. Unzip TiVBook, open a terminal in the folder, and type:
-
-   ```
-   npm run setup
-   ```
-
-   Answer the questions:
-   - your project ID
-   - WhatsApp details (you can skip these and add them later)
-   - the administrator's email and password
-
-   When it finishes it prints two web addresses:
-   - `https://<project>-staff.web.app`: the staff software online
-   - `https://<project>-play.web.app`: the player website
-
-That's it: TiVBook is online.
-
-### WhatsApp verification codes
-
-Players verify their phone number with a code sent by WhatsApp. To switch this on:
-
-1. In **Meta Business Suite → WhatsApp Manager**, add the casino's WhatsApp Business number.
-2. Create a message template: category **Authentication**, name **tivbook_otp**, button **Copy code**.
-3. Copy the **Phone Number ID** and create a **permanent access token** (System User).
-4. Run `npm run setup` again and paste both when asked.
-
-Until this is done, players can still be registered at the Front Desk or Cashier.
+Everything is stored online in the casino's own **free Supabase database** (no bank card needed). All staff computers and all players' phones stay in sync.
 
 ---
 
-## Part B — The staff setup file (one installer for every staff PC)
+## 1 · First computer (once, about 5 minutes)
 
-The Windows installer and the Android app are built automatically on GitHub's servers. You don't need any programming tools on your PC.
+1. Double-click **TiVBook-Staff-Setup.exe**. It installs by itself and opens. If Windows shows "Windows protected your PC", click **More info → Run anyway**. This appears because the app is new and not yet signed.
+2. Click **Set up TiVBook for the casino**.
+3. Click **Create a free account at supabase.com** and sign up (free, no card).
+4. Click **Open "Access Tokens"** → **Generate new token** → name it "TiVBook" → **copy** it.
+5. Paste the token into TiVBook. Type your name, email and a password (at least 10 characters).
+6. Click **Install TiVBook online** and wait 2–4 minutes with the window open.
 
-1. Create a free GitHub account and a **private** repository, then upload the TiVBook folder to it.
-2. In the repository, open **Settings → Secrets and variables → Actions** and add these six values. They are in the `.env` file created by the setup:
-   `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID`
-3. Open **Actions → Build TiVBook → Run workflow**. About 15 minutes later, download:
-   - **TiVBook-Staff-Setup.exe**
-   - **TiVBook-Player.apk**
+When it says **"TiVBook is online"**, you are signed in as Super Administrator and this computer is approved.
 
-**On each staff PC:**
+> If anything stops halfway, just click **Install TiVBook online** again. It continues where it stopped.
 
-1. Run `TiVBook-Staff-Setup.exe` and click **Next → Install → Finish**. A desktop icon appears.
-2. Open TiVBook Staff and sign in.
-3. The first time, give the PC a name (for example "Cashier 1"). A manager then approves it in **Administration → Devices**. This screen updates by itself once approved.
+## 2 · Other staff computers (1 minute each)
 
-Each staff member sees only the sections their role allows. **Administration → Staff accounts** is where you create logins (Cashier, Floor Supervisor, and so on). New staff choose their own password at first sign-in.
+1. Install **TiVBook-Staff-Setup.exe**.
+2. Paste the **connection code**. On the first computer it's in **Settings → Copy code**.
+3. Sign in, then name the computer (for example "Cashier 1").
+4. On your computer, approve it in **Devices → Approve**.
+
+Create each person's login in **Staff accounts**. They choose their own password at first sign-in.
+
+## 3 · Players' phones
+
+1. Send **TiVBook-Player.apk** to players (WhatsApp, or a QR code at the cashier).
+2. They open it and install. Android asks once to allow installing from this source.
+3. In the app they **scan the QR code** printed from **Settings → Print QR**, or paste the connection code.
+4. They sign in with their mobile number and a WhatsApp code, then register.
+
+**iPhone:** Apple allows installs only through the App Store. That needs an Apple Developer account (USD 99/year) and a Mac. Until then, iPhone players register at the Front Desk or Cashier.
+
+## 4 · WhatsApp codes (once)
+
+Players receive their sign-in code by WhatsApp. To switch it on:
+
+1. In **Meta WhatsApp Manager**, add the casino's WhatsApp Business number.
+2. Create a template: category **Authentication**, name **tivbook_otp**, button **Copy code**.
+3. Copy the **Phone Number ID** and create a **permanent access token**.
+4. Paste both in **TiVBook Staff → Settings → WhatsApp codes → Save**.
+
+Meta charges a small amount per WhatsApp code. Until this is set up, the Front Desk and Cashier can still register players.
 
 ---
 
-## Part C — The player app
+## Free limits (Supabase free plan)
 
-- **Android:** share `TiVBook-Player.apk` (via WhatsApp, the website or a QR code at the cashier). Players tap it to install. They may need to allow "Install unknown apps" once. For the **Google Play Store**, add the signing-key secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`) and upload the `.aab` file to Play Console.
-- **iPhone:** Apple only allows installs through the App Store or TestFlight. This needs the Apple Developer account (USD 99/year) and a Mac to build: open `apps/player` and run `npm run ios`, then submit with Xcode. Until then, iPhone players can use the player website and tap **Share → Add to Home Screen**.
+| | Free allowance | Enough for |
+|---|---|---|
+| Database | 500 MB | Many years of records |
+| ID photos | 1 GB | About 4,000 players (photos are shrunk to about 200 KB) |
+| Users | 50,000 a month | Far more than needed |
 
----
+A free database that is unused for 7 days is paused. A casino uses it every day, so this won't happen. The free plan has **no automatic backups**, so a daily backup is planned in a later phase.
 
-## Updates
+## Updating
 
-Change the code (or receive a new version), then:
-
-- run `npm run setup` again to update the online parts;
-- run **Build TiVBook** again for a new `.exe` and `.apk`.
-
-Existing data is never touched by an update.
+Install the new **TiVBook-Staff-Setup.exe** over the old one. On the Super Administrator's computer, run **Set up TiVBook for the casino** again with a new access token. It updates the server and keeps every record.

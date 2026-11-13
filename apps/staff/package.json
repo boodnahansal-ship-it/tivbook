@@ -1,28 +1,56 @@
 {
   "name": "@tivbook/staff",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p . && vite build",
     "typecheck": "tsc --noEmit -p .",
-    "tauri": "tauri",
-    "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop": "vite build && electron .",
+    "setup:windows": "vite build && node desktop/build-windows.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
     "@tivbook/client": "*",
-    "firebase": "^11.0.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.0.0",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "app-builder-bin": "^5.0.0-alpha.10",
+    "electron": "33.2.1",
+    "electron-builder": "^25.1.8",
     "typescript": "^5.6.0",
     "vite": "^5.4.0"
+  },
+  "main": "desktop/main.cjs",
+  "description": "TiVBook Staff \u2014 Ti Vegas",
+  "author": "Funworld Co Ltd \u2014 Ti Vegas",
+  "build": {
+    "appId": "mu.tivegas.tivbook.staff",
+    "productName": "TiVBook Staff",
+    "copyright": "Funworld Co Ltd \u2014 Ti Vegas",
+    "asar": true,
+    "win": {
+      "target": "nsis",
+      "icon": "desktop/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TiVBook Staff",
+      "installerIcon": "desktop/icon.ico",
+      "uninstallerIcon": "desktop/icon.ico",
+      "artifactName": "TiVBook-Staff-Setup.exe"
+    }
   }
 }

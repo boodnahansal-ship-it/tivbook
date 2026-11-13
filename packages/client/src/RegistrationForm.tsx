@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { call } from "./firebase";
+import { call } from "./api";
 import { useI18n } from "./i18n";
 
 export interface RegistrationFormProps {

@@ -1,7 +1,7 @@
 # TiVBook — Architecture, Data Model, Workflows & Milestones
 
 **Platform:** TiVBook by Ti Vegas (Funworld Co Ltd), Grand Baie, Mauritius
-**Document version:** Phase 2 — 13 November 2026
+**Document version:** Phase 2 (Supabase) — 13 November 2026
 **Time zone:** Indian/Mauritius (UTC+04:00, no daylight saving)
 **Currency:** Mauritian Rupee (MUR / Rs). All money stored as integer cents.
 
@@ -11,77 +11,70 @@
 
 | Deliverable | Contains | Install |
 |---|---|---|
-| **TiVBook Staff** | Admin, Cashier, Floor, Front Desk, scanning (USB scanner or PC/phone camera) | **One Windows setup** (`TiVBook-Staff-Setup.exe`), or the same software online in any browser |
-| **TiVBook** player app | Registration, bookings, tournaments, alerts | Separate download: Android (APK / Play Store), iPhone (App Store) or the player website |
+| **TiVBook Staff** | Admin, Cashier, Floor, Front Desk, scanning, first-time setup wizard | **One Windows setup** (`TiVBook-Staff-Setup.exe`, one click, no admin rights) |
+| **TiVBook** player app | Registration, bookings, tournaments, alerts | Separate download for Android (`TiVBook-Player.apk`); iPhone via App Store later |
 
-Both connect to one online backend and sync live. See `docs/SETUP.md`.
+Both connect to the casino's own **free Supabase** project and sync live. See `docs/SETUP.md`.
 
 ## 1. Architecture overview
 
 ```mermaid
 flowchart TB
   subgraph Clients
-    PA[Player App<br/>React + Capacitor · Android/iOS]
-    WEB[Player Website<br/>same code · Firebase Hosting]
-    ADM[TiVBook Staff<br/>Admin · Cashier · Floor · Front Desk · Scanner<br/>one Windows setup Tauri, or online in browser]
+    PA[TiVBook player app<br/>React + Capacitor · Android/iOS]
+    ADM[TiVBook Staff<br/>Admin · Cashier · Floor · Front Desk · Scanner<br/>React in Electron · one Windows setup]
   end
 
-  subgraph Firebase["Firebase / Google Cloud (europe-west region)"]
-    AUTH[Firebase Auth<br/>custom tokens + staff claims]
-    FN[Cloud Functions<br/>HTTPS callable API]
-    FS[(Cloud Firestore)]
-    ST[(Cloud Storage<br/>ID documents — private)]
-    SCH[Cloud Scheduler<br/>offer expiry · cut-offs · reminders]
-    FCM[Firebase Cloud Messaging]
+  subgraph Supabase["Supabase (free plan) — the casino's own project"]
+    AUTH[Auth<br/>staff e-mail logins · player logins after WhatsApp OTP<br/>role in app_metadata]
+    FN[Edge Function "api"<br/>all writes · roles · device approval · rules engine]
+    DB[(PostgreSQL<br/>tables · constraints · Row Level Security)]
+    RT[Realtime<br/>live updates to every screen]
+    ST[(Storage<br/>private ID-photo bucket)]
+    CRON[pg_cron every minute<br/>cut-offs · offer expiry · next alarm]
   end
 
   subgraph External
-    WA[WhatsApp Business<br/>Authentication template<br/>via approved BSP]
+    WA[WhatsApp Cloud API<br/>authentication template]
+    FCM[Firebase Cloud Messaging<br/>free push alarms]
   end
 
-  subgraph Cage["Cashier / Floor PCs"]
-    PRN[Epson TM-T88V<br/>ESC/POS over USB/LAN]
-    USB[USB barcode scanner<br/>keyboard wedge]
-  end
-
-  PA & WEB & ADM --> AUTH
-  PA & WEB & ADM -->|callable functions only for writes| FN
-  PA & WEB & ADM -->|real-time read listeners| FS
-  FN --> FS
-  FN --> ST
-  FN --> FCM --> PA
-  FN --> WA
-  SCH --> FN
-  ADM -->|Tauri native print command| PRN
-  USB --> ADM
-  CORE[[packages/core<br/>shared business rules<br/>TypeScript, pure, tested]] -.imported by.-> FN
-  CORE -.imported by.-> ADM
+  PA & ADM --> AUTH
+  PA & ADM -->|POST /functions/v1/api| FN
+  PA & ADM -->|read, filtered by RLS| DB
+  RT --> PA & ADM
+  FN --> DB & ST & AUTH
+  FN --> WA & FCM
+  CRON --> FN
+  CORE[[packages/core<br/>shared business rules<br/>TypeScript, tested]] -.bundled into.-> FN
+  CORE -.used by.-> ADM
 ```
 
 ### Key design decisions
 
 | Decision | Reason |
 |---|---|
-| **Every write that matters goes through a Cloud Function**, never straight from a client to Firestore. Clients only *read* (live listeners). | Prevents double booking, duplicate chip delivery, forged payments. Permission checks happen on the server. |
-| **One shared rules package (`packages/core`)** used by the backend and the Windows dashboards. | One copy of each rule. The dashboard can preview ("this move is restricted") and the server makes the final decision with the same code. |
-| **Money stored as integer cents (`bigint`-safe integers)** | No floating-point errors. Rs 1,250.50 is stored as `125050`. |
-| **Append-only ledger.** Completed transactions are never edited or deleted; mistakes are corrected with a linked *reversal*. | Audit trail and reconciliation. |
-| **Server time for every deadline** (offers, cut-offs, late registration). Apps display countdowns from a server-issued `expiresAt`. | A player's phone clock can't extend an offer. |
-| **Idempotency keys** on all cashier/floor actions. | A double-click or network retry never creates a second payment, ticket or chip delivery. |
-| **Signed ticket tokens (HMAC-SHA256)**, no personal data in the barcode. | Tickets can't be forged; a lost ticket reveals nothing. |
-| **Tauri** (not Electron) for Windows. | Installer about 10 MB instead of about 150 MB. Rust side can send raw ESC/POS bytes to the Epson. |
-| **React + Capacitor** for the player app (replaces Flutter). | Same language and shared code as the staff software and the player website; native Android/iOS builds give real push alarms with a custom sound. |
-| **Scanning lives inside TiVBook Staff** (no separate scanner app). | USB scanners type into the Floor screen; the camera option works on any approved PC or phone that opens the staff software. |
+| **Supabase free plan** (PostgreSQL) instead of Firebase | No bank card needed; all needed services included free. |
+| **Every write goes through the `api` server function.** Apps only *read*, and Row Level Security decides what each role can see. | Server-side checks of roles, approved devices and business rules. |
+| **The database itself enforces the critical rules**: one reservation per player per date (unique index), no overbooking (`active + held ≤ capacity` check), chips once per paid item (primary key), append-only ledger (trigger). | Even a bug or two simultaneous clicks cannot break them. Proven by concurrency tests (20 players at once, double-click payments, two scanners on one ticket). |
+| **Row locks in a fixed order** (table-day first) | No deadlocks under load. |
+| **One shared rules package (`packages/core`)** | Same rules in the server and the staff screens. |
+| **Money as integer cents; append-only ledger with linked reversals** | Exact sums; full audit trail. |
+| **Server time for deadlines**; **idempotency keys**; **HMAC-signed ticket codes** | Unchanged from Phase 1. |
+| **One-click setup wizard inside TiVBook Staff** (Supabase Management API, token used once, never saved) | No terminal, no programming tools. |
+| **Electron** for the Windows app | Can be built and tested here; one self-contained installer; the page has no access to the PC except two narrow functions (setup network calls to Supabase only, opening approved links). |
+| **Connection code / QR** (`TVB1-…`) | Other PCs and phones connect once without typing technical settings. Contains only the public key. |
 
-### Paid services (everything else is free / open-source)
+### Costs
 
-| Service | Why it costs | Rough cost |
-|---|---|---|
-| Firebase **Blaze** plan | Cloud Functions + Scheduler require it | Pay-as-you-go; a single casino's traffic is typically within free quotas or a few USD/month |
-| WhatsApp Business **authentication messages** via a Business Solution Provider (e.g. Twilio, 360dialog, Meta Cloud API direct) | Meta charges per authentication conversation | Per-message fee, varies by country — confirm with the chosen provider |
-| Apple Developer Program | Required to publish on the App Store | USD 99 / year |
-| Google Play Console | Required to publish on Play | USD 25 once |
-| Windows code-signing certificate | Avoids "unknown publisher" warnings | Optional, ~USD 100–400 / year |
+| Service | Cost |
+|---|---|
+| Supabase free plan (database, logins, storage, server function, live sync, timer) | Free, no card |
+| Firebase Cloud Messaging (optional phone alarms) | Free |
+| WhatsApp authentication messages | Small per-message fee from Meta |
+| Apple Developer Program (iPhone app) | USD 99/year — optional, later |
+| Google Play Console (Play Store) | USD 25 once — optional; the APK can be shared directly |
+| Windows code-signing certificate | Optional (removes the "unknown publisher" warning) |
 
 ---
 
@@ -89,18 +82,20 @@ flowchart TB
 
 ```
 tivbook/
-├── packages/core/        Shared business rules (TypeScript, no I/O)  ← built in Phase 1
-├── backend/              Firebase: Firestore rules, indexes, Cloud Functions
-├── packages/client/      Shared UI pieces: Firebase connection, EN/FR texts, registration form, ID photos
+├── packages/core/        Business rules (TypeScript, no I/O) — 59 tests
+├── packages/client/      Shared app pieces: connection, server calls, live data, EN/FR, registration, ID photos
+├── server/
+│   ├── sql/schema.sql    Database: tables, constraints, RLS, realtime, storage bucket
+│   ├── src/              The "api" server function (handlers, router, Deno entry)
+│   └── test/             Integration tests against a real PostgreSQL — 18 tests
 ├── apps/
-│   ├── staff/            TiVBook Staff (React) + src-tauri/ → one Windows setup
-│   └── player/           TiVBook player app (React) → Android/iOS via Capacitor, and the player website
-├── scripts/setup.mjs     One-command online setup
-├── .github/workflows/    Automatic builds of the .exe and .apk
-└── docs/                 Architecture, setup, manuals
+│   ├── staff/            TiVBook Staff (React) + desktop/ (Electron) + setup/ (one-click wizard)
+│   └── player/           TiVBook player app (React) → Android/iOS via Capacitor
+├── .github/workflows/    Automatic Android (and Windows) builds
+└── docs/                 Architecture, setup
 ```
 
-Admin, Cashier, Floor, Front Desk and scanning are **one staff application with role-based sections**, installed with **one setup file**. The staff member's login decides which sections appear. Every staff PC must be approved once by a manager (Administration → Devices). The player app is the only separate download.
+Admin, Cashier, Floor, Front Desk and scanning are **one staff application with role-based sections**, installed with **one setup file**. The login decides which sections appear; every staff PC must be approved once (Devices). The player app is the only separate download.
 
 ---
 
@@ -127,7 +122,7 @@ Admin, Cashier, Floor, Front Desk and scanning are **one staff application with 
 
 **(auth)** = second-person authorization: a supervisor enters their own PIN on the requesting device. Both identities are written to the audit log.
 
-Roles are stored as Firebase Auth **custom claims** (`role`, `stationId`) and re-checked inside every Cloud Function.
+Roles are stored in each login's server-only `app_metadata` (`role`, `player_id`) and re-checked inside the server function on every call, together with the approved-device check.
 
 ---
 
@@ -170,9 +165,9 @@ erDiagram
   RULES_VERSION ||--o{ RULES_ACK : "accepted as"
 ```
 
-### 4.2 Firestore collections
+### 4.2 Tables
 
-Monetary fields end in `Cents` and are integers. Timestamps are Firestore server timestamps. `*` = indexed.
+> Since the move to Supabase these are PostgreSQL tables with snake_case columns; **`server/sql/schema.sql` is the exact, authoritative definition** (constraints, indexes, RLS). The list below describes their purpose. Monetary fields end in `cents` and are integers.
 
 | Collection | Key fields | Notes |
 |---|---|---|
@@ -204,7 +199,7 @@ Monetary fields end in `Cents` and are integers. Timestamps are Firestore server
 | `prize_payouts/{id}` | `prizeEntitlementId*`, `instalment`, `netCents`, `method`, `cashierId`, `receiptNo`, `paidAt` | One receipt per instalment (daily cash cap). |
 | `tax_rules/{id}` | `category`, `rateBp` (basis points), `thresholdCents`, `method` (whole_amount / excess_only), `effectiveFrom`, `effectiveTo?` | Not hard-coded. |
 | `payout_limits/current` | `dailyCashCapCents` | Configurable. |
-| `ledger/{txnId}` | `playerId*`, `type*`, `amountCents`, `direction` (in / out / non_cash), `currency`, `ref {tableDayId? tournamentId? sessionId? entitlementId?}`, `cashierId*`, `stationId`, `shiftId*`, `method`, `authRef?`, `reversesTxnId?`, `reversedByTxnId?`, `status`, `notes`, `idempotencyKey*`, `createdAt*` | Append-only. Firestore rules forbid update/delete. |
+| `ledger/{txnId}` | `playerId*`, `type*`, `amountCents`, `direction` (in / out / non_cash), `currency`, `ref {tableDayId? tournamentId? sessionId? entitlementId?}`, `cashierId*`, `stationId`, `shiftId*`, `method`, `authRef?`, `reversesTxnId?`, `reversedByTxnId?`, `status`, `notes`, `idempotencyKey*`, `createdAt*` | Append-only. A database trigger forbids update/delete. |
 | `cashier_shifts/{id}` | `cashierId`, `stationId`, `openedAt`, `openingFloatCents`, `closedAt`, `declaredCents`, `expectedCents`, `varianceCents`, `status` | Expected cash is calculated from the ledger. |
 | `rules_categories/{id}`, `rules_versions/{id}`, `rules_acks/{playerId_versionId}` | category, language, `body` (structured blocks), `effectiveFrom`, `publishAt`, `status`, `versionNo` | Acknowledgement stores the exact version and timestamp. |
 | `notification_schedules/{id}`, `notification_history/{id}` | title, body, audience query, `sendAt`, `rrule`, delivery results | |
@@ -222,8 +217,8 @@ Monetary fields end in `Cents` and are integers. Timestamps are Firestore server
 ```mermaid
 sequenceDiagram
   participant P as Player App
-  participant F as reserveCashPlace()
-  participant DB as Firestore
+  participant F as api: reserveCashPlace
+  participant DB as PostgreSQL
   P->>F: tableDayId
   F->>DB: transaction: read table_day, guard(player,date), calendar
   alt booking window closed / past cut-off / table closed
@@ -350,12 +345,13 @@ Sound assets will be **original TiVBook tones**, not taken from other apps.
 
 ## 8. Security and privacy
 
-- HTTPS everywhere; Firestore/Storage encrypted at rest by Google; ID numbers additionally encrypted at application level (AES-256-GCM, key in Secret Manager).
-- Identity documents: private bucket, no client read rule, signed URLs valid 5 minutes, every view audit-logged.
-- Staff devices registered (`deviceId` claim) before they can call cashier/floor functions.
-- Firestore rules: players read only their own data; staff read according to role; **no client writes** to financial, ticket, reservation or offer collections.
+- HTTPS everywhere; Supabase encrypts data at rest.
+- Identity documents: private bucket, only the server can read files; staff see photos through the server, every view audit-logged. Document numbers are kept in a separate table visible only to Cashier/Front Desk/Manager+, and searched by hash.
+- Staff devices must be approved (Devices page) before any staff action works; disabled accounts are blocked immediately.
+- Row Level Security: players read only their own rows; staff read according to role; **no app can write any table directly**.
+- WhatsApp and push credentials are stored in a server-only table, entered by the Super Administrator, never readable by any app.
 - Session timeout on staff PCs (configurable, default 15 min idle) with PIN re-entry.
-- Daily Firestore export to Cloud Storage (backup); documented restore procedure.
+- Daily backup export (planned; the Supabase free plan has no automatic backups); documented restore procedure.
 - **Compliance check before go-live:** Mauritius Data Protection Act 2017 (registration with the Data Protection Office, privacy notice, retention periods), Gambling Regulatory Authority requirements for player identification and records, and FIAMLA / FIU obligations for customer due diligence and large transactions. WhatsApp OTP proves the phone number only. It never replaces ID/age verification at the cashier.
 
 ---
@@ -364,8 +360,8 @@ Sound assets will be **original TiVBook tones**, not taken from other apps.
 
 | Phase | Deliverable | "Done" means |
 |---|---|---|
-| **1** | Architecture, data model, workflows (this document); **`packages/core` rules engine with automated tests**; Firestore security rules; backend skeleton | Tests pass; rules reviewed |
-| 2 | Player registration, ID upload, WhatsApp OTP, sequential IDs | Player can register on Android/web; cashier sees them |
+| **1** | Architecture, data model, workflows; **`packages/core` rules engine with tests** | ✓ Done |
+| **2** | Player registration, ID upload, WhatsApp OTP, sequential IDs, staff accounts, device approval; **Supabase backend; one-click Windows setup with setup wizard** | ✓ Done (first live run = first real test) |
 | 3 | Tables, calendar, reservations | Weekly opening, one-per-date, cut-off expiry live |
 | 4 | Waiting lists, Place Available alarm, table movements | Alarm rings on a real phone; concurrent-accept test passes |
 | 5 | Rules & Policies editor + acknowledgements | Rules published to app/web with versioning |
@@ -380,9 +376,9 @@ Sound assets will be **original TiVBook tones**, not taken from other apps.
 | 14 | Security hardening, load test, staff pilot | Pilot on one festival |
 | 15 | Store releases, Windows installer, manuals | Signed builds |
 
-**What needs the casino before Phase 2 can go live:**
-1. A Firebase project (Google account owned by Funworld Co Ltd) on the Blaze plan.
-2. A WhatsApp Business account + chosen provider, with an approved authentication template.
+**What needs the casino before going live:**
+1. A free Supabase account (created during the setup wizard).
+2. A WhatsApp Business account with an approved authentication template.
 3. Apple Developer and Google Play accounts in the company's name.
 4. The Ti Vegas logo in high resolution (SVG or PNG ≥ 1000 px).
 5. Confirmation of the tax rule, daily cash cap, minimum age and KYC requirements from compliance.

@@ -1,24 +1,29 @@
 import { useState, type FormEvent } from "react";
-import { signInWithCustomToken, signOut } from "firebase/auth";
-import { auth, call, IdPhotos, RegistrationForm, useDoc, useI18n, useOnline, useSession, type Lang } from "@tivbook/client";
+import { call, ConnectScreen, getConnection, IdPhotos, refreshSession, RegistrationForm, supabase, useI18n, useOnline, useRow, useSession, type Lang } from "@tivbook/client";
 
-interface PlayerDoc {
-  surname: string; firstNames: string; phoneE164: string; kycStatus: "unverified" | "verified" | "rejected";
-  idDocType: "national_id" | "passport"; idImages: string[]; dateOfBirth: string; nationality: string;
+interface PlayerRow {
+  surname: string; first_names: string; phone_e164: string; kyc_status: "unverified" | "verified" | "rejected";
+  id_doc_type: "national_id" | "passport"; id_images: string[]; date_of_birth: string; nationality: string;
 }
 
 export function App() {
+  const [connected, setConnected] = useState(!!getConnection());
+  if (!connected) return <ConnectScreen onConnected={() => setConnected(true)} />;
+  return <Connected />;
+}
+
+function Connected() {
   const s = useSession();
   const { t } = useI18n();
   if (!s.ready) return <Splash text={t("loading")} />;
   if (!s.user) return <Shell><SignIn /></Shell>;
-  const playerId = s.claims.playerId as string | undefined;
+  const playerId = s.claims.player_id as string | undefined;
   if (!playerId) {
     return (
       <Shell>
         <div className="card stack">
           <h1>{t("register")}</h1>
-          <RegistrationForm verifiedPhone={s.claims.phoneE164 as string} onRegistered={() => void auth.currentUser?.getIdToken(true)} />
+          <RegistrationForm verifiedPhone={s.claims.phone_e164 as string} onRegistered={() => void refreshSession()} />
         </div>
       </Shell>
     );
@@ -61,6 +66,7 @@ function SignIn() {
   const { t } = useI18n();
   const [phone, setPhone] = useState("");
   const [sentTo, setSentTo] = useState<string | null>(null);
+  const [atDesk, setAtDesk] = useState(false);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,8 +75,9 @@ function SignIn() {
     e?.preventDefault();
     setBusy(true); setError(null);
     try {
-      const r = await call<{ phone: string }>("requestOtp", { phone: sentTo ?? phone });
+      const r = await call<{ phone: string; delivery: "whatsapp" | "desk" }>("requestOtp", { phone: sentTo ?? phone });
       setSentTo(r.phone);
+      setAtDesk(r.delivery === "desk");
       setCode("");
     } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
   }
@@ -79,8 +86,9 @@ function SignIn() {
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      const r = await call<{ token: string }>("verifyOtpCode", { phone: sentTo, code });
-      await signInWithCustomToken(auth, r.token);
+      const r = await call<{ email: string; password: string }>("verifyOtpCode", { phone: sentTo, code });
+      const { error: e2 } = await supabase().auth.signInWithPassword({ email: r.email, password: r.password });
+      if (e2) throw e2;
     } catch (err) { setError((err as Error).message); setBusy(false); }
   }
 
@@ -99,7 +107,9 @@ function SignIn() {
         </form>
       ) : (
         <form className="card stack" onSubmit={verify}>
-          <p>{t("codeSentTo")} <strong>{sentTo}</strong></p>
+          {atDesk
+            ? <div className="notice">{t("codeAtDesk")}<div style={{ marginTop: ".4rem" }}>{t("codeForNumber")} <strong>{sentTo}</strong></div></div>
+            : <p>{t("codeSentTo")} <strong>{sentTo}</strong></p>}
           <div>
             <label htmlFor="code">{t("enterCode")}</label>
             <input id="code" className="code-input" inputMode="numeric" autoComplete="one-time-code" maxLength={6} required value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} />
@@ -121,16 +131,16 @@ function SignIn() {
 function PlayerHome({ playerId }: { playerId: string }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<"home" | "profile">("home");
-  const { data: p, loading } = useDoc<PlayerDoc>(`players/${playerId}`);
+  const { data: p, loading } = useRow<PlayerRow>("players", "player_id", playerId);
   if (loading || !p) return <Splash text={t("loading")} />;
-  const required = p.idDocType === "passport" ? ["passport"] : ["id_front", "id_back"];
-  const missingPhotos = required.some((k) => !p.idImages?.includes(k));
+  const required = p.id_doc_type === "passport" ? ["passport"] : ["id_front", "id_back"];
+  const missingPhotos = required.some((k) => !p.id_images?.includes(k));
 
   return (
     <Shell>
       {tab === "home" ? (
         <div className="stack">
-          <p className="muted">{t("welcome")}, <strong style={{ color: "var(--text)" }}>{p.firstNames}</strong></p>
+          <p className="muted">{t("welcome")}, <strong style={{ color: "var(--text)" }}>{p.first_names}</strong></p>
           <div className="card center">
             <div className="muted small">{t("yourPlayerId")}</div>
             <div className="player-id">{playerId}</div>
@@ -138,12 +148,12 @@ function PlayerHome({ playerId }: { playerId: string }) {
           </div>
           <div className="card row spread">
             <strong>{t("identity")}</strong>
-            <span className={`badge ${p.kycStatus}`}>{t(`kyc_${p.kycStatus}`)}</span>
+            <span className={`badge ${p.kyc_status}`}>{t(`kyc_${p.kyc_status}`)}</span>
           </div>
-          {missingPhotos && p.kycStatus !== "verified" && (
+          {missingPhotos && p.kyc_status !== "verified" && (
             <div className="card stack">
               <h2>{t("idPhotos")}</h2>
-              <IdPhotos docType={p.idDocType} uploaded={p.idImages ?? []} />
+              <IdPhotos docType={p.id_doc_type} uploaded={p.id_images ?? []} />
             </div>
           )}
         </div>
@@ -152,13 +162,13 @@ function PlayerHome({ playerId }: { playerId: string }) {
           <div className="card stack">
             <h2>{t("profile")}</h2>
             <Field k={t("surname")} v={p.surname} />
-            <Field k={t("firstNames")} v={p.firstNames} />
-            <Field k={t("mobileNumber")} v={p.phoneE164} />
-            <Field k={t("dateOfBirth")} v={p.dateOfBirth} />
+            <Field k={t("firstNames")} v={p.first_names} />
+            <Field k={t("mobileNumber")} v={p.phone_e164} />
+            <Field k={t("dateOfBirth")} v={p.date_of_birth} />
             <Field k={t("nationality")} v={p.nationality} />
           </div>
           <div className="card row spread"><span>{t("language")}</span><LangSwitch /></div>
-          <button className="secondary block" onClick={() => void signOut(auth)}>{t("signOut")}</button>
+          <button className="secondary block" onClick={() => void supabase().auth.signOut()}>{t("signOut")}</button>
         </div>
       )}
       <nav className="tabbar">

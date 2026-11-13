@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { call } from "./firebase";
+import { call } from "./api";
 import { useI18n, type TKey } from "./i18n";
 import { prepareIdImage } from "./images";
 

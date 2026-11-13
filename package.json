@@ -3,15 +3,15 @@
   "private": true,
   "workspaces": [
     "packages/*",
-    "backend/functions",
+    "server",
     "apps/*"
   ],
   "scripts": {
     "build:core": "npm run build -w @tivbook/core",
-    "test": "npm run test --workspaces --if-present",
+    "build:server": "npm run build -w @tivbook/server",
+    "test": "npm run build:core && npm run test --workspaces --if-present",
     "typecheck": "npm run build:core && npm run typecheck --workspaces --if-present",
-    "build": "npm run build:core && npm run build -w @tivbook/staff -w @tivbook/player",
-    "setup": "node scripts/setup.mjs"
+    "build": "npm run build:core && npm run build:server && npm run build -w @tivbook/staff -w @tivbook/player"
   },
   "engines": {
     "node": ">=22"

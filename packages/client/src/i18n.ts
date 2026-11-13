@@ -23,6 +23,13 @@ const T = {
   enterCode: ["Enter the 6-digit code", "Saisissez le code à 6 chiffres"],
   codeSentTo: ["Code sent by WhatsApp to", "Code envoyé par WhatsApp au"],
   verify: ["Verify", "Vérifier"],
+  codeAtDesk: ["Go to the cashier or front desk at Ti Vegas and ask for your TiVBook code. Bring your ID card or passport. The code is valid for 15 minutes.", "Rendez-vous à la caisse ou à l'accueil du Ti Vegas et demandez votre code TiVBook. Munissez-vous de votre carte d'identité ou passeport. Le code est valable 15 minutes."],
+  codeForNumber: ["Code for", "Code pour"],
+  signInCodes: ["Sign-in codes", "Codes de connexion"],
+  signInCodesHint: ["Players who sign in to the app without WhatsApp get their code here. Check their ID, then read them the code for their number.", "Les joueurs qui se connectent à l'application sans WhatsApp reçoivent leur code ici. Vérifiez leur pièce d'identité, puis donnez-leur le code de leur numéro."],
+  noCodes: ["No codes waiting.", "Aucun code en attente."],
+  expiresIn: ["expires in", "expire dans"],
+  newPlayer: ["New player", "Nouveau joueur"],
   resend: ["Send a new code", "Renvoyer un code"],
   changeNumber: ["Change number", "Changer de numéro"],
   // registration
@@ -88,6 +95,14 @@ const T = {
   changePassword: ["Choose a new password", "Choisissez un nouveau mot de passe"],
   newPassword: ["New password (min. 10 characters)", "Nouveau mot de passe (min. 10 caractères)"],
   online: ["Online", "En ligne"],
+  // connection & setup
+  connectTitle: ["Connect to your casino", "Connecter à votre casino"],
+  connectHint: ["Enter the TiVBook connection code (starts with TVB1-). Ask the cashier, or scan the QR code shown at Ti Vegas.", "Saisissez le code de connexion TiVBook (commence par TVB1-). Demandez à la caisse ou scannez le QR code affiché au Ti Vegas."],
+  connectionCode: ["Connection code", "Code de connexion"],
+  connect: ["Connect", "Connecter"],
+  scanQr: ["Scan QR code", "Scanner le QR code"],
+  invalidCode: ["This code is not valid. Check it and try again.", "Ce code n'est pas valide. Vérifiez-le et réessayez."],
+  settings: ["Settings", "Paramètres"],
   offline: ["Offline — changes will sync when the connection returns", "Hors ligne — synchronisation au retour de la connexion"],
 } satisfies Record<string, [string, string]>;
 

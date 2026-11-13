@@ -1,9 +1,9 @@
 /**
- * Prepares an ID photo for upload: JPEG/PNG photos are resized (max 2000 px) and
- * re-encoded as JPEG to keep uploads small on mobile data. HEIC files that the
+ * Prepares an ID photo for upload: photos are resized (max 1400 px) and re-encoded as
+ * JPEG (~200 KB) — small on mobile data and in the free storage allowance. HEIC files that the
  * browser cannot decode are sent as-is (the server accepts HEIC).
  */
-export async function prepareIdImage(file: File, maxSide = 2000, quality = 0.85): Promise<{ base64: string; previewUrl: string; bytes: number }> {
+export async function prepareIdImage(file: File, maxSide = 1400, quality = 0.72): Promise<{ base64: string; previewUrl: string; bytes: number }> {
   const original = await fileToBase64(file);
   try {
     const bitmap = await createImageBitmap(file);

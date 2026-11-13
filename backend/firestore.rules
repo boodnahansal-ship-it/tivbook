@@ -1,0 +1,82 @@
+rules_version = '2';
+// TiVBook — Firestore security rules.
+// Principle: clients READ (live listeners); every WRITE goes through Cloud Functions
+// (Admin SDK bypasses these rules). Only harmless self-service fields are client-writable.
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function role() { return signedIn() ? request.auth.token.get('role', 'player') : null; }
+    function isRole(roles) { return role() in roles; }
+    function isStaff() { return isRole(['super_admin','manager','tournament_director','cashier','floor_supervisor','dealer','front_desk']); }
+    function isAdmin() { return isRole(['super_admin','manager']); }
+    function myPlayerId() { return request.auth.token.get('playerId', ''); }
+    function ownsDoc() { return signedIn() && resource.data.playerId == myPlayerId(); }
+
+    // Players: own profile, or staff.
+    match /players/{playerId} {
+      allow read: if (signedIn() && playerId == myPlayerId()) || isStaff();
+      allow write: if false;
+      // Identity numbers: never the player's app; selected staff only.
+      match /private/{doc} {
+        allow read: if isRole(['super_admin','manager','cashier','front_desk']);
+        allow write: if false;
+      }
+      // The player app registers its own push token.
+      match /devices/{deviceId} {
+        allow read, delete: if signedIn() && playerId == myPlayerId();
+        allow create, update: if signedIn() && playerId == myPlayerId()
+          && request.resource.data.keys().hasOnly(['fcmToken','platform','updatedAt']);
+      }
+    }
+
+    // Public information (programmes, tables, published rules & results).
+    match /festivals/{id}        { allow read: if true; allow write: if false; }
+    match /tournaments/{id}      { allow read: if true; allow write: if false; }
+    match /cash_tables/{id}      { allow read: if true; allow write: if false; }
+    match /table_days/{id}       { allow read: if true; allow write: if false; }
+    match /booking_calendar/{id} { allow read: if true; allow write: if false; }
+    match /rules_categories/{id} { allow read: if true; allow write: if false; }
+    match /rules_versions/{id}   { allow read: if resource.data.status == 'published' || isStaff(); allow write: if false; }
+    match /tournament_results/{id} { allow read: if resource.data.status == 'published' || isStaff(); allow write: if false; }
+    match /leaderboards/{tid}/snapshots/{id} { allow read: if resource.data.status == 'published' || isStaff(); allow write: if false; }
+
+    // Player-owned operational records: read own, staff read all, no client writes.
+    match /cash_reservations/{id}           { allow read: if ownsDoc() || isStaff(); allow write: if false; }
+    match /waiting_lists/{id}               { allow read: if ownsDoc() || isStaff(); allow write: if false; }
+    match /waiting_offers/{id}              { allow read: if ownsDoc() || isStaff(); allow write: if false; }
+    match /table_movement_requests/{id}     { allow read: if ownsDoc() || isStaff(); allow write: if false; }
+    match /tournament_preregistrations/{id} { allow read: if ownsDoc() || isStaff(); allow write: if false; }
+    match /tournament_entries/{id}          { allow read: if ownsDoc() || isStaff(); allow write: if false; }
+    match /prize_entitlements/{id}          { allow read: if ownsDoc() || isStaff(); allow write: if false; }
+    match /rules_acks/{id}                  { allow read: if ownsDoc() || isStaff(); allow write: if false; }
+    match /alert_settings/{playerId} {
+      allow read, write: if signedIn() && playerId == myPlayerId();
+    }
+
+    // Money & tickets: players may see their own ledger lines; never write.
+    match /ledger/{id}         { allow read: if ownsDoc() || isRole(['super_admin','manager','cashier']); allow write: if false; }
+    match /prize_payouts/{id}  { allow read: if isRole(['super_admin','manager','cashier']); allow write: if false; }
+    match /cashier_shifts/{id} { allow read: if isAdmin() || (isRole(['cashier']) && resource.data.cashierId == request.auth.uid); allow write: if false; }
+    match /tickets/{id}        { allow read: if isRole(['super_admin','manager','cashier','tournament_director','floor_supervisor','dealer']); allow write: if false; }
+    match /entitlements/{id}   { allow read: if isStaff(); allow write: if false; }
+    match /chip_deliveries/{id} { allow read: if isStaff(); allow write: if false; }
+    match /cash_sessions/{id}  { allow read: if isStaff() || ownsDoc(); allow write: if false; }
+
+    // Staff accounts and approved devices.
+    match /staff/{uid} {
+      allow read: if (signedIn() && request.auth.uid == uid) || isAdmin();
+      allow write: if false;
+    }
+    match /staff_devices/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /identity_documents/{id} { allow read: if isRole(['super_admin','manager','cashier','front_desk']) || ownsDoc(); allow write: if false; }
+
+    // Admin-only / server-only.
+    match /audit_logs/{id}     { allow read: if isRole(['super_admin']); allow write: if false; }
+    match /system_settings/{id} { allow read: if isStaff(); allow write: if false; }
+    match /tax_rules/{id}      { allow read: if isStaff(); allow write: if false; }
+
+    // Everything else (counters, guards, OTP challenges, idempotency …): server only.
+    match /{document=**} { allow read, write: if false; }
+  }
+}

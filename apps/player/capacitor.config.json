@@ -1,0 +1,7 @@
+{
+  "appId": "mu.tivegas.tivbook",
+  "appName": "TiVBook",
+  "webDir": "dist",
+  "android": { "allowMixedContent": false },
+  "plugins": {}
+}

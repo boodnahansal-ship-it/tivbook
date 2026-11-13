@@ -1,0 +1,19 @@
+{
+  "name": "tivbook",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "backend/functions",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:core": "npm run build -w @tivbook/core",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run build:core && npm run typecheck --workspaces --if-present",
+    "build": "npm run build:core && npm run build -w @tivbook/staff -w @tivbook/player",
+    "setup": "node scripts/setup.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

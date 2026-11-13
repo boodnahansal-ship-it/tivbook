@@ -1,0 +1,8 @@
+rules_version = '2';
+// Identity documents are uploaded and viewed only through Cloud Functions (signed URLs).
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /public/{allPaths=**} { allow read: if true; allow write: if false; }  // logos, festival images
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}

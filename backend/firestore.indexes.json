@@ -1,0 +1,12 @@
+{
+  "indexes": [
+    { "collectionGroup": "cash_reservations", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "cutoffAt", "order": "ASCENDING" } ] },
+    { "collectionGroup": "waiting_offers", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "expiresAt", "order": "ASCENDING" } ] },
+    { "collectionGroup": "waiting_lists", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "tableDayId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" } ] },
+    { "collectionGroup": "waiting_lists", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "tableDayId", "order": "ASCENDING" }, { "fieldPath": "playerId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" } ] },
+    { "collectionGroup": "cashier_shifts", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "cashierId", "order": "ASCENDING" }, { "fieldPath": "status", "order": "ASCENDING" } ] },
+    { "collectionGroup": "ledger", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "playerId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" } ] },
+    { "collectionGroup": "ledger", "queryScope": "COLLECTION", "fields": [ { "fieldPath": "shiftId", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "ASCENDING" } ] }
+  ],
+  "fieldOverrides": []
+}

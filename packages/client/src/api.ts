@@ -12,6 +12,8 @@ export class ApiError extends Error {
   }
 }
 
+const READ_ONLY = new Set(["ping", "searchPlayers", "listDeskCodes", "myWaitingPositions", "getIdDocumentImage", "getIntegrationStatus", "validateTicket", "requestDeviceApproval"]);
+
 /** Calls a TiVBook server action and returns its data, with readable errors. */
 export async function call<T = unknown>(action: string, data: Record<string, unknown> = {}): Promise<T> {
   const conn = getConnection();
@@ -30,6 +32,8 @@ export async function call<T = unknown>(action: string, data: Record<string, unk
   const body = (await res.json().catch(() => null)) as { ok: boolean; data?: T; error?: { code: string; message: string; details?: unknown } } | null;
   if (!body) throw new ApiError("The server did not answer correctly. Please try again.", "BAD_RESPONSE");
   if (!body.ok) throw new ApiError(body.error!.message, body.error!.code, body.error!.details);
+  // Every successful change refreshes the data on screen at once (live updates also arrive on their own).
+  if (!READ_ONLY.has(action)) window.dispatchEvent(new Event("tivbook:refresh"));
   return body.data as T;
 }
 

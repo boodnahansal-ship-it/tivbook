@@ -127,6 +127,12 @@ create table if not exists cash_tables (
   min_buy_in_cents bigint not null, max_buy_in_cents bigint not null, default_capacity int not null default 9,
   active boolean not null default true
 );
+-- Weekly schedule of each table (Phase 3)
+alter table cash_tables add column if not exists open_time text not null default '19:00';
+alter table cash_tables add column if not exists cutoff_time text not null default '21:00';
+alter table cash_tables add column if not exists weekdays int[] not null default '{0,1,2,3,4,5,6}';
+alter table cash_tables add column if not exists sort_order int not null default 0;
+
 create table if not exists table_days (
   id text primary key, table_id text not null references cash_tables, table_name text not null,
   date date not null, status text not null default 'open' check (status in ('open','closed')),
@@ -151,6 +157,12 @@ create table if not exists cash_reservations (
 create unique index if not exists one_reservation_per_date on cash_reservations(player_id, date)
   where status in ('reserved','checked_in','seated');
 create index if not exists reservations_cutoff on cash_reservations(cutoff_at) where status = 'reserved';
+alter table cash_reservations add column if not exists seat int;
+alter table cash_reservations add column if not exists checked_in_at timestamptz;
+alter table cash_reservations add column if not exists seated_at timestamptz;
+-- One player per physical seat.
+create unique index if not exists one_player_per_seat on cash_reservations(table_day_id, seat) where status = 'seated';
+alter table table_days add column if not exists open_time text not null default '19:00';
 
 create table if not exists waiting_lists (
   id uuid primary key default gen_random_uuid(),
@@ -309,7 +321,7 @@ do $$
 declare t text;
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    foreach t in array array['players','staff','staff_devices','identity_documents','table_days','cash_reservations',
+    foreach t in array array['players','staff','staff_devices','identity_documents','cash_tables','table_days','cash_reservations',
       'waiting_lists','waiting_offers','tournaments','tournament_entries','chip_deliveries']
     loop
       if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and tablename = t) then

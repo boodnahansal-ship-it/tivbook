@@ -62,9 +62,15 @@ export function useRows<T = Record<string, unknown>>(
       .subscribe();
     const online = () => void load();
     window.addEventListener("online", online);
+    // Safety net if the live connection drops (e.g. weak Wi-Fi): quiet refresh every 30 s while visible.
+    const poll = setInterval(() => { if (document.visibilityState === "visible") void load(); }, 30_000);
+    const refreshAll = () => void load();
+    window.addEventListener("tivbook:refresh", refreshAll);
     return () => {
       cancelled = true;
+      clearInterval(poll);
       window.removeEventListener("online", online);
+      window.removeEventListener("tivbook:refresh", refreshAll);
       void sb.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

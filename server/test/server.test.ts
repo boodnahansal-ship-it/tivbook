@@ -316,3 +316,68 @@ describe("code from the cashier (no WhatsApp)", () => {
     w.fakes.whatsappDown = false;
   });
 });
+
+describe("tables, check-in, seating and waiting list (Phase 3)", () => {
+  it("manager creates a table; its days appear for the next two weeks", async () => {
+    w.clock = Date.parse("2026-11-16T08:00:00Z"); // Monday 12:00 Mauritius
+    expect(await w.code(cashier, "upsertCashTable", { name: "X", minBuyInCents: 1, maxBuyInCents: 2 })).toBe("PERMISSION_DENIED");
+    const r = await w.call(admin, "upsertCashTable", {
+      name: "Table 7", gameType: "NLH", smallBlindCents: 2500, bigBlindCents: 5000, minBuyInCents: 200000, maxBuyInCents: 1000000,
+      defaultCapacity: 9, openTime: "19:00", cutoffTime: "21:00", weekdays: [4, 5, 6],
+    });
+    expect(r.tableId).toBe("TABLE-7");
+    const days = await db.sql`select date from table_days where table_id = 'TABLE-7' order by date`;
+    expect(days.map((x) => (x.date as Date).toISOString().slice(0, 10))).toEqual(["2026-11-19", "2026-11-20", "2026-11-21", "2026-11-26", "2026-11-27", "2026-11-28"]);
+    expect(await w.code(admin, "upsertCashTable", { name: "Bad", minBuyInCents: 500, maxBuyInCents: 100 })).toBe("INVALID_ARGUMENT");
+  });
+
+  it("check-in, seats (one player per seat), leaving frees the place for the waiting list", async () => {
+    const dayId = "TABLE-7_2026-11-19";
+    await w.call(admin, "setTableDay", { tableDayId: dayId, capacity: 6 });
+    const a = await w.call(cashier, "reserveCashPlace", { tableDayId: dayId, playerId: "110" });
+    const b = await w.call(cashier, "reserveCashPlace", { tableDayId: dayId, playerId: "111" });
+    const wl = await w.call(cashier, "joinWaitingList", { tableDayId: dayId, playerId: "112" });
+    await w.call(cashier, "checkInReservation", { reservationId: a.reservationId });
+    expect(await w.code(cashier, "checkInReservation", { reservationId: a.reservationId })).toBe("NOT_RESERVED");
+    await w.call(admin, "seatPlayer", { reservationId: a.reservationId, seat: 3 });
+    expect(await w.code(admin, "seatPlayer", { reservationId: b.reservationId, seat: 3 })).toBe("SEAT_TAKEN");
+    expect(await w.code(admin, "seatPlayer", { reservationId: b.reservationId, seat: 10 })).toBe("INVALID_SEAT");
+    await w.call(admin, "seatPlayer", { reservationId: b.reservationId, seat: 5 });
+    // a cut-off never expires seated players
+    expect(await w.code(admin, "setTableDay", { tableDayId: dayId, capacity: 1 })).toBe("CAPACITY");
+    const left = await w.call(admin, "leaveTable", { reservationId: a.reservationId });
+    expect(left.offersCreated).toBe(1);
+    const [o] = await db.sql`select * from waiting_offers where waiting_entry_id = ${wl.waitingEntryId}`;
+    expect(o!.status).toBe("pending");
+  });
+
+  it("a player can leave the waiting list; a held place goes to the next player", async () => {
+    const dayId = "TABLE-7_2026-11-19";
+    await w.call(cashier, "joinWaitingList", { tableDayId: dayId, playerId: "113" });
+    const [entry112] = await db.sql`select id from waiting_lists where player_id = '112' and table_day_id = ${dayId}`;
+    await w.call(cashier, "leaveWaitingList", { waitingEntryId: entry112!.id }); // 112 had the pending offer
+    const [o113] = await db.sql`select status from waiting_offers where player_id = '113' and table_day_id = ${dayId}`;
+    expect(o113!.status).toBe("pending");
+    const [t] = await db.sql`select active_count, held_count, waiting_count from table_days where id = ${dayId}`;
+    expect(t).toMatchObject({ active_count: 1, held_count: 1, waiting_count: 1 });
+  });
+
+  it("shows players their place in the queue", async () => {
+    const dayId = "TABLE-7_2026-11-26";
+    await w.call(admin, "setTableDay", { tableDayId: dayId, capacity: 2 });
+    for (const p of ["114", "115"]) await w.call(cashier, "reserveCashPlace", { tableDayId: dayId, playerId: p });
+    const p2 = w.fakes.callerFor([...w.fakes.users.entries()].find(([, u]) => u.app_metadata.player_id === "002")![0]);
+    await w.call(cashier, "joinWaitingList", { tableDayId: dayId, playerId: "116" });
+    w.clock += 1000;
+    const mine = await w.call(p2, "joinWaitingList", { tableDayId: dayId });
+    const pos = await w.call(p2, "myWaitingPositions");
+    expect(pos.positions[mine.waitingEntryId]).toBe(2);
+  });
+
+  it("closed dates in the calendar close the tables of that day", async () => {
+    const cal = await w.call(admin, "setBookingCalendar", { openWeekday: 0, openTime: "10:00", closedDates: ["2026-11-21"] });
+    expect(cal.closedDates).toEqual(["2026-11-21"]);
+    const [t] = await db.sql`select status from table_days where id = 'TABLE-7_2026-11-21'`;
+    expect(t!.status).toBe("closed");
+  });
+});

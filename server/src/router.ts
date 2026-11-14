@@ -3,16 +3,18 @@ import { ApiError } from "./util.js";
 import { listDeskCodes, requestOtp, verifyOtpCode } from "./handlers/otp.js";
 import { getIdDocumentImage, registerPlayer, registerPushToken, searchPlayers, setKycStatus, uploadIdDocument } from "./handlers/players.js";
 import { bootstrapSuperAdmin, createStaffUser, getIntegrationStatus, passwordChanged, requestDeviceApproval, setDeviceStatus, setIntegrations, updateStaffUser } from "./handlers/staff.js";
-import { cancelCashReservation, cronTick, joinWaitingList, notifyPlaceReleased, reserveCashPlace, respondPlaceOffer } from "./handlers/cash.js";
+import { cancelCashReservation, joinWaitingList, notifyPlaceReleased, reserveCashPlace, respondPlaceOffer } from "./handlers/cash.js";
+import { checkInReservation, cronTick, leaveTable, leaveWaitingList, myWaitingPositions, seatPlayer, setBookingCalendar, setTableDay, upsertCashTable } from "./handlers/tables.js";
 import { confirmChipDelivery, recordTournamentPayment, validateTicket } from "./handlers/tournaments.js";
 
 /** Every server action TiVBook has. One server function ("api") handles them all. */
 export const ACTIONS: Record<string, Handler> = {
-  ping: async () => ({ ok: true, service: "tivbook", version: "0.3.0" }),
+  ping: async () => ({ ok: true, service: "tivbook", version: "0.4.0" }),
   requestOtp, verifyOtpCode, listDeskCodes,
   registerPlayer, uploadIdDocument, getIdDocumentImage, setKycStatus, searchPlayers, registerPushToken,
   createStaffUser, updateStaffUser, requestDeviceApproval, setDeviceStatus, passwordChanged, bootstrapSuperAdmin, setIntegrations, getIntegrationStatus,
   reserveCashPlace, cancelCashReservation, joinWaitingList, respondPlaceOffer, notifyPlaceReleased, cronTick,
+  upsertCashTable, setTableDay, setBookingCalendar, checkInReservation, seatPlayer, leaveTable, leaveWaitingList, myWaitingPositions,
   recordTournamentPayment, validateTicket, confirmChipDelivery,
 };
 

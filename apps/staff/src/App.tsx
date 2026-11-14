@@ -4,6 +4,8 @@ import { PlayersPage } from "./PlayersPage";
 import { DevicesPage, SettingsPage, StaffPage } from "./AdminPages";
 import { SetupWizard } from "./setup/SetupWizard";
 import { DeskCodesPage } from "./DeskCodesPage";
+import { FloorPage } from "./FloorPage";
+import { TablesPage } from "./TablesPage";
 import { ROLE_LABEL, type Role } from "./roles";
 
 const signOut = () => void supabase().auth.signOut();
@@ -172,10 +174,12 @@ function ChangePassword() {
 
 /* ───────── Dashboard shell ───────── */
 
-type Section = "players" | "codes" | "staff" | "devices" | "settings";
+type Section = "floor" | "players" | "codes" | "tables" | "staff" | "devices" | "settings";
 const SECTIONS: Array<{ id: Section; label: TKey; roles: Role[] }> = [
+  { id: "floor", label: "floor", roles: ["super_admin", "manager", "floor_supervisor", "cashier", "front_desk"] },
   { id: "players", label: "players", roles: ["super_admin", "manager", "tournament_director", "cashier", "floor_supervisor", "dealer", "front_desk"] },
   { id: "codes", label: "signInCodes", roles: ["super_admin", "manager", "cashier", "front_desk"] },
+  { id: "tables", label: "tables", roles: ["super_admin", "manager"] },
   { id: "staff", label: "staffAccounts", roles: ["super_admin", "manager"] },
   { id: "devices", label: "devices", roles: ["super_admin", "manager"] },
   { id: "settings", label: "settings", roles: ["super_admin", "manager"] },
@@ -208,6 +212,8 @@ function Dashboard({ role, name }: { role: Role; name: string }) {
       <main className="page wide">
         {section === "players" && <PlayersPage role={role} />}
         {section === "codes" && <DeskCodesPage />}
+        {section === "floor" && <FloorPage />}
+        {section === "tables" && <TablesPage />}
         {section === "staff" && <StaffPage role={role} />}
         {section === "devices" && <DevicesPage />}
         {section === "settings" && <SettingsPage role={role} />}

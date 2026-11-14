@@ -1,5 +1,8 @@
-import { useState, type FormEvent } from "react";
-import { call, ConnectScreen, getConnection, IdPhotos, refreshSession, RegistrationForm, supabase, useI18n, useOnline, useRow, useSession, type Lang } from "@tivbook/client";
+import { useEffect, useState, type FormEvent } from "react";
+import { CashGames, MyBookings } from "./CashGames";
+import { OfferAlarm, playChime } from "./OfferAlarm";
+import { setupPush } from "./push";
+import { call, ConnectScreen, getConnection, IdPhotos, refreshSession, RegistrationForm, supabase, useI18n, useOnline, useRow, useRows, useSession, type Lang } from "@tivbook/client";
 
 interface PlayerRow {
   surname: string; first_names: string; phone_e164: string; kyc_status: "unverified" | "verified" | "rejected";
@@ -130,7 +133,8 @@ function SignIn() {
 
 function PlayerHome({ playerId }: { playerId: string }) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<"home" | "profile">("home");
+  const [tab, setTab] = useState<"home" | "cash" | "bookings" | "profile">("home");
+  useEffect(() => { void setupPush().catch(() => {}); }, []);
   const { data: p, loading } = useRow<PlayerRow>("players", "player_id", playerId);
   if (loading || !p) return <Splash text={t("loading")} />;
   const required = p.id_doc_type === "passport" ? ["passport"] : ["id_front", "id_back"];
@@ -138,7 +142,8 @@ function PlayerHome({ playerId }: { playerId: string }) {
 
   return (
     <Shell>
-      {tab === "home" ? (
+      <OfferAlarm playerId={playerId} />
+      {tab === "cash" ? <CashGames playerId={playerId} /> : tab === "bookings" ? <MyBookings playerId={playerId} /> : tab === "home" ? (
         <div className="stack">
           <p className="muted">{t("welcome")}, <strong style={{ color: "var(--text)" }}>{p.first_names}</strong></p>
           <div className="card center">
@@ -146,6 +151,7 @@ function PlayerHome({ playerId }: { playerId: string }) {
             <div className="player-id">{playerId}</div>
             <div className="muted small">{t("showAtCashier")}</div>
           </div>
+          <NextBooking playerId={playerId} onBook={() => setTab("cash")} />
           <div className="card row spread">
             <strong>{t("identity")}</strong>
             <span className={`badge ${p.kyc_status}`}>{t(`kyc_${p.kyc_status}`)}</span>
@@ -168,11 +174,14 @@ function PlayerHome({ playerId }: { playerId: string }) {
             <Field k={t("nationality")} v={p.nationality} />
           </div>
           <div className="card row spread"><span>{t("language")}</span><LangSwitch /></div>
+          <button className="secondary block" onClick={() => { try { playChime(new AudioContext()); navigator.vibrate?.([400, 150, 400]); } catch { /* no audio */ } }}>🔔 {t("testAlarm")}</button>
           <button className="secondary block" onClick={() => void supabase().auth.signOut()}>{t("signOut")}</button>
         </div>
       )}
       <nav className="tabbar">
         <button className={tab === "home" ? "on" : ""} onClick={() => setTab("home")}><span aria-hidden>🏠</span>{t("home")}</button>
+        <button className={tab === "cash" ? "on" : ""} onClick={() => setTab("cash")}><span aria-hidden>♠</span>{t("cashGames")}</button>
+        <button className={tab === "bookings" ? "on" : ""} onClick={() => setTab("bookings")}><span aria-hidden>📅</span>{t("myBookings")}</button>
         <button className={tab === "profile" ? "on" : ""} onClick={() => setTab("profile")}><span aria-hidden>👤</span>{t("profile")}</button>
       </nav>
     </Shell>
@@ -181,4 +190,16 @@ function PlayerHome({ playerId }: { playerId: string }) {
 
 function Field({ k, v }: { k: string; v: string }) {
   return <div className="row spread"><span className="muted">{k}</span><span>{v}</span></div>;
+}
+
+function NextBooking({ playerId, onBook }: { playerId: string; onBook: () => void }) {
+  const { t } = useI18n();
+  const today = new Date(Date.now() + 4 * 3600_000).toISOString().slice(0, 10);
+  const { rows } = useRows<{ id: string; date: string; status: string; table_id: string; table_day_id: string }>("cash_reservations", { column: "player_id", value: playerId }, { order: "date", ascending: true });
+  const next = rows.find((r) => r.date >= today && ["reserved", "checked_in", "seated"].includes(r.status));
+  return next ? (
+    <div className="card row spread"><div><div className="muted small">{t("myBookings")}</div><strong>{next.table_id} · {next.date}</strong></div><span className="badge verified">{t(`status_${next.status}` as "status_reserved")}</span></div>
+  ) : (
+    <button className="block" onClick={onBook}>♠ {t("book")}</button>
+  );
 }

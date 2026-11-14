@@ -227,7 +227,3 @@ export async function runScheduledJobs(ctx: Ctx) {
   return { expiredReservations: due.length, expiredOffers: offers.length, newOffers: offered };
 }
 
-export const cronTick: Handler = async (ctx) => {
-  if (!ctx.cronAuthorized) denied("Scheduled job only.");
-  return runScheduledJobs(ctx);
-};
